@@ -113,8 +113,31 @@ failed:
 proc_t *
 proc_create(char *name)
 {
-        NOT_YET_IMPLEMENTED("PROCS: proc_create");
-        return NULL;
+        //NOT_YET_IMPLEMENTED("PROCS: proc_create");
+        proc_t *p = slab_obj_alloc(proc_allocator);
+        p -> p_pid = _proc_getid();
+        strcpy(p -> p_comm, name);
+        //memset(p, 0, sizeof(proc_t));
+        list_init(&p -> p_threads);
+        list_init(&p -> p_children);
+        p -> p_status = 0;
+        p -> p_state = PROC_RUNNING;
+        sched_queue_init(p -> p_wait);
+        p -> p_pagedir = pt_create_pagedir();
+        list_link_init(&p -> p_list_link);
+        list_link_init(&p -> p_child_link);
+        list_insert_tail(&_proc_list, &p -> p_list_link);
+
+        if (p -> p_pid == PID_INIT) {
+            proc_initproc = p;
+        } else if (p -> p_pid == PID_IDLE) {
+            p -> p_pproc = NULL;
+        } else {
+            p -> p_pproc = curproc;
+            list_insert_tail(&curproc -> p_children, &p -> p_child_link);
+        }
+
+        return p;
 }
 
 /**
@@ -144,7 +167,20 @@ proc_create(char *name)
 void
 proc_cleanup(int status)
 {
-        NOT_YET_IMPLEMENTED("PROCS: proc_cleanup");
+        //NOT_YET_IMPLEMENTED("PROCS: proc_cleanup");
+        proc_t *child;
+        if (curproc != proc_initproc) {
+            list_iterate_begin(&curproc -> p_children, child, proc_t, p_child_link) {
+                child -> p_pproc = proc_initproc;
+                list_insert_tail(&proc_initproc -> p_children, &child -> p_child_link);
+            } list_iterate_end();
+        } else {
+            //cleanup is called from within proc_initproc
+        }
+        curproc -> p_status = status;
+        curproc -> p_state = PROC_DEAD;
+
+        sched_wakeup_on(&curproc -> p_pproc -> p_wait);
 }
 
 /*
@@ -158,7 +194,11 @@ proc_cleanup(int status)
 void
 proc_kill(proc_t *p, int status)
 {
-        NOT_YET_IMPLEMENTED("PROCS: proc_kill");
+        //NOT_YET_IMPLEMENTED("PROCS: proc_kill");
+        kthread_t *kthread_to_kill;
+        list_iterate_begin(&p -> p_threads, kthread_to_kill, kthread_t, kt_plink) {
+            kthread_cancel(kthread_to_kill, (void *) status);
+        } list_iterate_end();
 }
 
 /*
@@ -170,7 +210,19 @@ proc_kill(proc_t *p, int status)
 void
 proc_kill_all()
 {
-        NOT_YET_IMPLEMENTED("PROCS: proc_kill_all");
+        //NOT_YET_IMPLEMENTED("PROCS: proc_kill_all");
+        proc_t *proc_to_kill;
+        list_iterate_begin(&_proc_list, proc_to_kill, proc_t, p_list_link) {
+            if (proc_to_kill != curproc  &&
+                proc_to_kill -> p_pid != PID_IDLE &&
+                proc_to_kill -> p_pproc -> p_pid != PID_IDLE &&) {
+                proc_kill(proc_to_kill, proc_to_kill -> p_status);
+            }
+        } list_iterate_end();
+        if (curproc -> p_pid != PID_IDLE &&
+            curproc -> p_pproc -> p_pid != PID_IDLE &&) {
+            proc_kill(curproc, curproc -> p_status);
+        }
 }
 
 /*
@@ -184,7 +236,9 @@ proc_kill_all()
 void
 proc_thread_exited(void *retval)
 {
-        NOT_YET_IMPLEMENTED("PROCS: proc_thread_exited");
+        //NOT_YET_IMPLEMENTED("PROCS: proc_thread_exited");
+        proc_cleanup((int) retval);
+        sched_switch();
 }
 
 /* If pid is -1 dispose of one of the exited children of the current
@@ -205,7 +259,11 @@ proc_thread_exited(void *retval)
 pid_t
 do_waitpid(pid_t pid, int options, int *status)
 {
-        NOT_YET_IMPLEMENTED("PROCS: do_waitpid");
+        //NOT_YET_IMPLEMENTED("PROCS: do_waitpid");
+        if (list_empty(curproc -> p_children)) {
+            return -ECHILD;
+        }
+
         return 0;
 }
 
