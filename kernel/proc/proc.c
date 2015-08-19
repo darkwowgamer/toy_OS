@@ -263,6 +263,50 @@ do_waitpid(pid_t pid, int options, int *status)
         if (list_empty(curproc -> p_children)) {
             return -ECHILD;
         }
+        int child_flag = 0;
+        /*if (child_flag == 0) {
+            return -ECHILD;
+        }*/
+        if ((pid == -1 || pid > 0) && options == 0) {
+            if (pid == -1) {
+                while (1) {
+                    proc_t *child;
+                    list_iterate_begin(&curproc -> p_children, child, proc_t, p_child_link) {
+                        if (child -> p_state == PROC_DEAD) {
+                            *status = child -> p_status;
+                            list_remove(&child -> p_list_link);
+                            list_remove(&child -> p_child_link);
+                            kthread_t *thread_to_dispose = list_head(&child -> p_threads, kthread_t, kt_plink);
+                            kthread_destroy(thread_to_dispose);
+                            pt_destroy_pagedir(child -> p_pagedir);
+                            slab_obj_free(proc_allocator, child);
+                            return child -> p_pid;
+                        }
+                    } list_iterate_end();
+                    sched_sleep_on(&curproc -> p_wait);
+                }
+            } else {
+                proc_t *child;
+                list_iterate_begin(&curproc -> p_children, child, proc_t, p_child_link) {
+                    if (child -> p_pid == pid) {
+                        while (1) {
+                            if (child -> p_state == PROC_DEAD) {
+                                *status = child -> p_status;
+                                list_remove(&child -> p_list_link);
+                                list_remove(&child -> p_child_link);
+                                kthread_t *thread_to_dispose = list_head(&child -> p_threads, kthread_t, kt_plink);
+                                kthread_destroy(thread_to_dispose);
+                                pt_destroy_pagedir(child -> p_pagedir);
+                                slab_obj_free(proc_allocator, child);
+                                return child -> p_pid;
+                            }
+                            sched_sleep_on(&curproc -> p_wait);
+                        }
+                    }
+                } list_iterate_end();
+
+            }
+        } 
 
         return 0;
 }
@@ -276,7 +320,8 @@ do_waitpid(pid_t pid, int options, int *status)
 void
 do_exit(int status)
 {
-        NOT_YET_IMPLEMENTED("PROCS: do_exit");
+        //NOT_YET_IMPLEMENTED("PROCS: do_exit");
+        proc_kill(curproc, status);
 }
 
 size_t
