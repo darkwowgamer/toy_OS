@@ -98,8 +98,22 @@ kthread_destroy(kthread_t *t)
 kthread_t *
 kthread_create(struct proc *p, kthread_func_t func, long arg1, void *arg2)
 {
-        NOT_YET_IMPLEMENTED("PROCS: kthread_create");
-        return NULL;
+        //NOT_YET_IMPLEMENTED("PROCS: kthread_create");
+        kthread_t *t = slab_obj_alloc(kthread_allocator);
+        //memset作用是将k后面sizeof(kthread_t)的内存清零
+        memset(k, 0, sizeof(kthread_t));
+        t->kt_kstack = alloc_stack();
+        t->kt_retval = NULL;
+        t->kt_errno = 0;
+        t->kt_proc = p;
+        t->kt_cancelled = 0;
+        t->kt_wchan = NULL;
+        t->kt_state = 0;
+        list_link_init(&t->kt_qlink);
+        list_link_init(&t->kt_plink);
+        list_insert_tail(&p->p_threads, &t->kt_plink);
+        context_setup(t->kt_ctx, func, arg1, arg2, t - > kt_kstack, DEFAULT_STACK_SIZE, p->p_pagedir);
+        return t;
 }
 
 /*
@@ -116,7 +130,16 @@ kthread_create(struct proc *p, kthread_func_t func, long arg1, void *arg2)
 void
 kthread_cancel(kthread_t *kthr, void *retval)
 {
-        NOT_YET_IMPLEMENTED("PROCS: kthread_cancel");
+        //NOT_YET_IMPLEMENTED("PROCS: kthread_cancel");
+        if (kthr == curthr) {
+                kthread_exit(retval);
+        } else {
+                kthr->kt_cancelled = 1;
+                kthr->kt_retval = retval;
+                if (kthr->kt_state == KT_SLEEP_CANCELLABLE) {
+                        sched_cancel(kthr);
+                }
+        }
 }
 
 /*
@@ -132,7 +155,10 @@ kthread_cancel(kthread_t *kthr, void *retval)
 void
 kthread_exit(void *retval)
 {
-        NOT_YET_IMPLEMENTED("PROCS: kthread_exit");
+        //NOT_YET_IMPLEMENTED("PROCS: kthread_exit");
+        curthr->kt_retval = retval;
+        curthr->kt_state = KT_EXITED;
+        proc_thread_exited(retval);
 }
 
 /*
